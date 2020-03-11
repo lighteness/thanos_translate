@@ -70,13 +70,12 @@ Thanos使用Prometheus存储格式，把历史数据以相对高性价比的方�
 Thanos主要组件有：
 - 边车组件（Sidecar）：连接Prometheus，并把Prometheus暴露给查询网关（Query Gateway），以供实时查询，并且可以上传Prometheus数据给云存储，以供长期保存。
 - 查询网关（Query Gateway）：实现了Prometheus API，与其他组件（如边车组件Sidecar，或是存储网关Store Gateway）一起协同工作
-
 - 存储网关（Store Gateway）：将云存储中的数据内容暴露出来
 - 压缩器（Compactor）：将云存储中的数据进行压缩和下采样
-- 接收器（Receiver）：从Prometheus’ remote-write WAL（Prometheus远程预写式日志)获取数据，暴露出去或者上传到云存储
-- 规则组件（Ruler）： 针对数据进行评估和报警
+- 接收器（Receiver）：从Prometheus’ remote-write WAL（Prometheus远程预写式日志）获取数据，暴露出去或者上传到云存储
+- 规则组件（Ruler）：针对数据进行评估和报警
 
-在这边文章里，我们只谈谈前三个组件。
+在这边文章里，我们主要谈谈前三个组件。
 
 
 。。。图
@@ -87,9 +86,9 @@ Thanos主要组件有：
 
 虽然有很多种方式安装Prometheus，我更喜欢[Prometheus-Operator](https://github.com/coreos/prometheus-operator)这种方式，它能让部署，管理和定义Prometheus更加容易。
 
-安装Prometheus-Operator最容易的方式就是使用[Helm chart](https://github.com/helm/charts/tree/master/stable/prometheus-operator)，提供了对高可用的支持，Thanos边车组件（Sidecar）的注入，以及监控虚拟机，监控kubernetes基础架构，监控你的应用所需的预制报警。
+安装Prometheus-Operator最容易的方式就是使用[Helm chart](https://github.com/helm/charts/tree/master/stable/prometheus-operator)，提供了对高可用的支持，Thanos边车组件（Sidecar）的注入，以及监控虚拟机、监控kubernetes基础架构、监控你的应用所需的预制报警。
 
-在部署Thanos边车组件（Sidecar）之前，我们需要一个Kubernetes Secret，里面放置了如何连接云存储所需的详细信息，在这个demo中，我讲使用 微软云Azure。
+在部署Thanos边车组件（Sidecar）之前，我们需要一个Kubernetes Secret，里面放置了如何连接云存储所需的详细信息，在这个demo中，我将使用微软云Azure。
 
 创建一个快存储账号——
 
@@ -97,23 +96,18 @@ Thanos主要组件有：
 az storage account create ——name <storage_name> ——resource-group <resource_group> ——location <location> ——sku Standard_LRS ——encryption blob
 ```
 
-
-
 然后，创建一个文件夹（在azure存储概念上，称作container更准确）
-
 ```
 az storage container create ——account-name <storage_name> ——name thanos
 ```
 
 获取存储秘钥——
-
 ```
 az storage account keys list -g <resource_group> -n <storage_name>
 
 ```
 
 为存储配置创建一个yaml文件 (thanos-storage-config.yaml)——
-
 ```
 type: AZURE
 config:
@@ -123,15 +117,12 @@ config:
 ```
 
 基于此yaml文件，转化成一个Kubernetes Secret —
-
 ```
 kubectl -n monitoring create secret generic thanos-objstore-config ——from-file=thanos.yaml=thanos-storage-config.yaml
 ```
 
 
 创建另一个yaml文件(prometheus-operator-values.yaml)来覆盖默认的Prometheus-Operator配置——
-
-
 ```
 prometheus:
   prometheusSpec:
@@ -154,7 +145,6 @@ grafana:           # (optional) we don't need Grafana in all clusters
 ```
 
 然后部署：
-
 ```
 helm install ——namespace monitoring ——name prometheus-operator stable/prometheus-operator -f prometheus-operator-values.yaml
 ```
@@ -163,11 +153,9 @@ helm install ——namespace monitoring ——name prometheus-operator stable/pr
 
 为了让存储网关（Store Gateway）可以访问这些Thanos边车组件（Sidecar），我们将需要通过一个Ingress把他们暴露出去，这里我使用[Nginx Ingress Controller](https://github.com/kubernetes/ingress-nginx)，但是你可以使用其他的Ingress Controller，只要能支持gRPC协议（[Envoy](https://www.envoyproxy.io/)可能是最佳的选择）。
 
-
 为了使存储网关（Store Gateway）和边车组件（Sidecar）之间的通信安全，我们使用TLS双向认证技术（mutual-TLS），这意味着客户端要验证服务端，服务端也要验证客户端。
 
 假设你已经有了.pfx文件你可以使用openssl来抽取私钥，公钥和CA——
-
 ```
 # 公钥
 openssl pkcs12 -in cert.pfx -nocerts -nodes | sed -ne '/-BEGIN PRIVATE KEY-/,/-END PRIVATE KEY-/p' > cert.key
@@ -178,7 +166,6 @@ openssl pkcs12 -in cert.pfx -cacerts -nokeys -chain | sed -ne '/-BEGIN CERTIFICA
 ```
 
 以此基础上，创建2个Kubernetes Secrets
-
 ```
 # a secret to be used for TLS termination
 kubectl create secret tls -n monitoring thanos-ingress-secret ——key ./cert.key ——cert ./cert.cer
@@ -187,7 +174,6 @@ kubectl create secret generic -n monitoring thanos-ca-secret ——from-file=ca.
 ```
 
 确保你有一个域（domain）用来解析你的Kubernetes机器，并且创建2个子域（sub-domain），用来访问各个Thanos边车组件（Sidecar）
- 
 ```
 thanos-0.your.domain
 thanos-1.your.domain
@@ -285,7 +271,6 @@ spec:
 为了部署Thanos组件，我选择了使用这个[Helm chart](https://github.com/arthur-c/thanos-helm-chart)（并非官方版本）
 
 创建一个yaml文件thanos-values.yaml来覆盖默认的chart设置——
-
 ```
 
 # Thanos query configuration
@@ -309,13 +294,11 @@ store:
 ```
 
 因为存储网关（Store Gateway）需要从我们之前创建的块存储中读取数据，我们也需要基于我们之前创建的thanos-storage-config.yaml创建一份kubernetes secret。
-
 ```
 kubectl -n thanos create secret generic thanos-objstore-config ——from-file=thanos.yaml=thanos-storage-config.yaml
 ```
 
 为了部署这个chart，我们讲用到之前我们早些时候创建的证书，把他们当做值注入进去。
-
 ```
 helm install ——name thanos ——namespace thanos ./thanos -f thanos-values.yaml ——set-file query.tlsClient.cert=cert.cer ——set-file query.tlsClient.key=cert.key ——set-file query.tlsClient.ca=cacerts.cer ——set-file store.tlsServer.cert=cert.cer ——set-file store.tlsServer.key=cert.key ——set-file store.tlsServer.ca=cacerts.cer
 ```
@@ -323,7 +306,6 @@ helm install ——name thanos ——namespace thanos ./thanos -f thanos-values.
 
 
 ### 验证
-
 为了验证一切工作正常，你可以对Thanos查询网关（Query Gateway）HTTP 服务使用 port-forward 来转发 ——-
 ```
 kubectl -n thanos port-forward svc/thanos-query-http 8080:10902
@@ -334,11 +316,7 @@ kubectl -n thanos port-forward svc/thanos-query-http 8080:10902
 。。。图
 
 
-
-
 ### Grafana
-
-
 为了安装上Grafana，你可以用Grafana的Helm chart。
 
 创建一份yaml文件grafana-values.yaml，内容如下——
@@ -396,11 +374,11 @@ helm install ——name grafana ——namespace thanos stable/grafana -f grafana
 kubectl -n thanos port-forward svc/grafana 8080:80
 ```
 
-哇~现在你已经完成了部署，获得了一个高可用的监控解决方案，它基于**Prometheus**，对跨集群的Prometheus提供了一个**集中化的全局视图**，并且拥有**长久保留数据的存储能力**。
+哇~ 现在你已经完成了部署，获得了一个高可用的监控解决方案，它基于**Prometheus**，对跨集群的Prometheus提供了一个**集中化的全局视图**，并且拥有**长久保留数据的存储能力**。
 
 ## 其他选择
 
-这篇文章主要关注在 Prometheus 和 Thanos，但是如果集中化的全局视图，你不需要，你仍旧可以考虑仅仅使用Prometheus和定义一个持久化存储。
+这篇文章主要关注在Prometheus和Thanos，但是如果集中化的全局视图，你不需要，你仍旧可以考虑仅仅使用Prometheus和定义一个持久化存储。
 
 另外的选择是部署[cortex](https://github.com/cortexproject/cortex)，它是另一个开源项目，比Thanos要复杂一些，但是提供了不同的解决思路。
 
